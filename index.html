@@ -15,6 +15,7 @@
     --muted: #8a8378;
     --border: #e6e1d8;
     --danger: #c25656;
+    --success: #4a8c6b;
   }
   * { box-sizing: border-box; }
   body {
@@ -46,6 +47,8 @@
   .btn-primary { background: var(--primary); color: white; }
   .btn-primary:hover { background: var(--primary-dark); }
   .btn-secondary { background: var(--border); color: var(--text); }
+  .btn-success { background: var(--success); color: white; }
+  .btn-success:hover { background: #3d7a5a; }
   .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); padding: 6px 10px; font-size: 12px; }
   .btn-small { padding: 6px 10px; font-size: 12px; }
   input {
@@ -72,6 +75,7 @@
     border-radius: 999px;
     margin-top: 4px;
   }
+  .badge-closed { background: var(--success); }
   .admin-toggle { font-size: 13px; color: var(--primary); background: none; border: 1px solid var(--primary); padding: 8px 14px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
@@ -88,6 +92,40 @@
   .summary strong { color: var(--text); }
   .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 20px 0; }
   .loading { text-align: center; color: var(--muted); padding: 40px 0; }
+  .closed-month {
+    background: #f0f5ee;
+    border: 1px solid #d0e0d0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-top: 12px;
+  }
+  .closed-month h4 {
+    margin: 0 0 8px 0;
+    color: var(--success);
+    font-size: 14px;
+  }
+  .closed-month .summary {
+    margin-top: 4px;
+  }
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .tab {
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: var(--border);
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .tab.active {
+    background: var(--primary);
+    color: white;
+  }
 </style>
 </head>
 <body>
@@ -104,11 +142,19 @@ let state = {
   password: null,
   showLoginForm: false,
   registros: [],
+  registrosCerrados: [],
   precioHora: 0,
   editingId: null,
   loading: true,
-  error: null
+  error: null,
+  view: "current" // "current" or "closed"
 };
+
+function formatHoras(horasDecimal) {
+  const horas = Math.floor(horasDecimal);
+  const minutos = Math.round((horasDecimal - horas) * 60);
+  return `${horas}:${String(minutos).padStart(2, '0')}hs`;
+}
 
 function render() {
   const app = document.getElementById("app");
@@ -120,6 +166,7 @@ function render() {
 
   const totalMes = state.registros.reduce((acc, r) => acc + Number(r.totalDia || 0), 0);
   const horasMes = state.registros.reduce((acc, r) => acc + Number(r.horasTrabajadas || 0), 0);
+  const horasMesFormatted = formatHoras(horasMes);
 
   let html = `
     <div class="top-bar">
@@ -180,60 +227,119 @@ function render() {
     `;
   }
 
-  html += `<div class="card">`;
-  if (state.registros.length === 0) {
-    html += `<div class="empty">Todavía no hay registros cargados.</div>`;
-  } else {
-    html += `
-      <table>
-        <thead>
-          <tr>
-            <th>Fecha</th><th>Ingreso</th><th>Salida</th><th>Horas</th><th>Total</th>
-            ${state.unlocked ? "<th></th>" : ""}
-          </tr>
-        </thead>
-        <tbody>
-    `;
-    state.registros.forEach(r => {
+  // Tabs
+  html += `
+    <div class="tabs">
+      <button class="tab ${state.view === 'current' ? 'active' : ''}" onclick="switchView('current')">📅 Mes actual</button>
+      <button class="tab ${state.view === 'closed' ? 'active' : ''}" onclick="switchView('closed')">📁 Períodos cerrados</button>
+    </div>
+  `;
+
+  if (state.view === 'current') {
+    html += `<div class="card">`;
+    if (state.registros.length === 0) {
+      html += `<div class="empty">Todavía no hay registros cargados.</div>`;
+    } else {
       html += `
-        <tr>
-          <td>${r.fecha}</td>
-          <td>${r.horaIngreso}</td>
-          <td>${r.horaSalida}</td>
-          <td>${Number(r.horasTrabajadas).toFixed(2)}</td>
-          <td>$${Number(r.totalDia).toFixed(2)}</td>
-          ${state.unlocked ? `
-            <td class="actions-cell">
-              <button class="btn-secondary btn-small" onclick="editar('${r.id}')">✎</button>
-              <button class="btn-danger btn-small" onclick="borrar('${r.id}')">✕</button>
-            </td>` : ""}
-        </tr>
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th><th>Ingreso</th><th>Salida</th><th>Horas</th><th>Total</th>
+              ${state.unlocked ? "<th></th>" : ""}
+            </tr>
+          </thead>
+          <tbody>
       `;
-    });
-    html += `</tbody></table>`;
-    html += `
-      <div class="summary">
-        <span>Horas totales: <strong>${horasMes.toFixed(2)}</strong></span>
-        <span>Total a pagar: <strong>$${totalMes.toFixed(2)}</strong></span>
-      </div>
-    `;
+      state.registros.forEach(r => {
+        const horasFormatted = formatHoras(Number(r.horasTrabajadas));
+        html += `
+          <tr>
+            <td>${r.fecha}</td>
+            <td>${r.horaIngreso}</td>
+            <td>${r.horaSalida}</td>
+            <td>${horasFormatted}</td>
+            <td>$${Number(r.totalDia).toFixed(2)}</td>
+            ${state.unlocked ? `
+              <td class="actions-cell">
+                <button class="btn-secondary btn-small" onclick="editar('${r.id}')">✎</button>
+                <button class="btn-danger btn-small" onclick="borrar('${r.id}')">✕</button>
+              </td>` : ""}
+          </tr>
+        `;
+      });
+      html += `</tbody></table>`;
+      html += `
+        <div class="summary">
+          <span>Horas totales: <strong>${horasMesFormatted}</strong></span>
+          <span>Total a pagar: <strong>$${totalMes.toFixed(2)}</strong></span>
+        </div>
+      `;
+    }
+    html += `</div>`;
+
+    // Botón de cerrar período
+    if (state.unlocked && state.registros.length > 0) {
+      html += `
+        <button class="btn-success" style="width:100%" onclick="cerrarPeriodo()">
+          📦 Cerrar mes actual
+        </button>
+        <p style="font-size:12px;color:var(--muted);margin-top:6px;text-align:center;">
+          Al cerrar el mes, los registros se archivarán y comenzará un nuevo período.
+        </p>
+      `;
+    }
+  } else {
+    // Vista de períodos cerrados
+    html += `<div class="card">`;
+    if (state.registrosCerrados.length === 0) {
+      html += `<div class="empty">No hay períodos cerrados.</div>`;
+    } else {
+      state.registrosCerrados.forEach((periodo, idx) => {
+        const totalPeriodo = periodo.registros.reduce((acc, r) => acc + Number(r.totalDia || 0), 0);
+        const horasPeriodo = periodo.registros.reduce((acc, r) => acc + Number(r.horasTrabajadas || 0), 0);
+        const horasFormatted = formatHoras(horasPeriodo);
+        html += `
+          <div class="closed-month">
+            <h4>📅 ${periodo.nombre || `Período ${idx + 1}`}</h4>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">
+              ${periodo.fechaCierre ? `Cerrado el: ${periodo.fechaCierre}` : ''}
+            </div>
+            <div class="summary">
+              <span>Horas totales: <strong>${horasFormatted}</strong></span>
+              <span>Total: <strong>$${totalPeriodo.toFixed(2)}</strong></span>
+            </div>
+            ${state.unlocked ? `
+              <button class="btn-danger btn-small" style="margin-top:8px;" onclick="borrarPeriodo(${idx})">🗑️ Eliminar período</button>
+            ` : ''}
+          </div>
+        `;
+      });
+    }
+    html += `</div>`;
   }
-  html += `</div>`;
 
   app.innerHTML = html;
 
   if (state.showLoginForm && !state.unlocked) {
     const pwInput = document.getElementById("pwInput");
-    pwInput.focus();
-    pwInput.addEventListener("keydown", e => { if (e.key === "Enter") tryLogin(); });
+    if (pwInput) {
+      pwInput.focus();
+      pwInput.addEventListener("keydown", e => { if (e.key === "Enter") tryLogin(); });
+    }
   }
 
-  if (state.unlocked && !state.editingId) {
-    document.getElementById("fechaInput").valueAsDate = new Date();
+  if (state.unlocked && !state.editingId && state.view === 'current') {
+    const fechaInput = document.getElementById("fechaInput");
+    if (fechaInput) fechaInput.valueAsDate = new Date();
   }
 }
 
 // ============ ACCIONES ============
+
+function switchView(view) {
+  state.view = view;
+  render();
+}
 
 function toggleAdminLogin() {
   state.showLoginForm = !state.showLoginForm;
@@ -271,6 +377,7 @@ async function cargarDatos() {
     const res = await fetch(API_URL + "?action=list");
     const data = await res.json();
     state.registros = data.registros || [];
+    state.registrosCerrados = data.registrosCerrados || [];
     state.precioHora = data.precioHora || 0;
   } catch (err) {
     state.error = "No se pudo conectar con la planilla. Revisá la URL configurada.";
@@ -283,7 +390,6 @@ async function postAction(payload) {
   payload.password = state.password;
   const res = await fetch(API_URL, {
     method: "POST",
-    // Sin header Content-Type para evitar el preflight de CORS con Apps Script
     body: JSON.stringify(payload)
   });
   const data = await res.json();
@@ -293,6 +399,7 @@ async function postAction(payload) {
     return false;
   }
   state.registros = data.registros || [];
+  state.registrosCerrados = data.registrosCerrados || [];
   state.precioHora = data.precioHora || 0;
   state.error = null;
   return true;
@@ -342,6 +449,18 @@ function cancelarEdicion() {
 async function borrar(id) {
   if (!confirm("¿Borrar este registro?")) return;
   await postAction({ action: "delete", id: id });
+  render();
+}
+
+async function cerrarPeriodo() {
+  if (!confirm("¿Cerrar el mes actual? Los registros se archivarán y no se podrán modificar.")) return;
+  await postAction({ action: "closePeriod" });
+  render();
+}
+
+async function borrarPeriodo(idx) {
+  if (!confirm("¿Eliminar este período cerrado?")) return;
+  await postAction({ action: "deleteClosedPeriod", index: idx });
   render();
 }
 
