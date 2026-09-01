@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fichaje Niñera</title>
+<style>
+  :root {
+    --bg: #f5f3ef;
+    --card: #ffffff;
+    --primary: #7a5c3e;
+    --primary-dark: #5e4530;
+    --accent: #d98c4a;
+    --text: #2e2a26;
+    --muted: #8a8378;
+    --border: #e6e1d8;
+    --danger: #c25656;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 24px 16px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .role-choice { display: flex; gap: 12px; flex-direction: column; }
+  button {
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-secondary { background: var(--border); color: var(--text); }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); padding: 6px 10px; font-size: 12px; }
+  .btn-small { padding: 6px 10px; font-size: 12px; }
+  input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    margin-top: 4px;
+  }
+  label { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .field { margin-bottom: 14px; }
+  .row { display: flex; gap: 10px; }
+  .row > div { flex: 1; }
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .badge {
+    display: inline-block;
+    background: var(--accent);
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+  .logout { font-size: 13px; color: var(--muted); background: none; border: none; padding: 4px; font-weight: 600; text-decoration: underline; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+  .actions-cell { display: flex; gap: 6px; }
+  .price-box {
+    display: flex; align-items: center; gap: 10px; background: #fbf7f0;
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    margin-bottom: 16px;
+  }
+  .price-box input { margin: 0; }
+  .total-row { font-weight: 700; }
+  .error { color: var(--danger); font-size: 13px; margin-top: 8px; }
+  .summary { display: flex; justify-content: space-between; font-size: 14px; color: var(--muted); margin-top: 10px; }
+  .summary strong { color: var(--text); }
+  .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 20px 0; }
+  .loading { text-align: center; color: var(--muted); padding: 40px 0; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<script>
+// =========================================================
+// CONFIGURACIÓN: pegá acá la URL de tu Web App de Apps Script
+// =========================================================
+const API_URL = "https://script.google.com/macros/s/AKfycbyDRdeeflf3djZ6sFrlD5v-u7bQic6uSZDw09jg4I23z2kC1pwS_UWJoqOzVDNip7D7BQ/exec";
+
+let state = {
+  role: null,       // 'admin' | 'ninera'
+  password: null,
+  registros: [],
+  precioHora: 0,
+  editingId: null,
+  loading: true,
+  error: null
+};
+
+function render() {
+  const app = document.getElementById("app");
+
+  if (!state.role) {
+    app.innerHTML = `
+      <h1>🧾 Fichaje Niñera</h1>
+      <p class="subtitle">Elegí cómo querés entrar</p>
+      <div class="card role-choice">
+        <button class="btn-primary" onclick="chooseRole('admin')">Soy administrador/a</button>
+        <button class="btn-secondary" onclick="chooseRole('ninera')">Soy la niñera (solo ver)</button>
+      </div>
+    `;
+    return;
+  }
+
+  if (state.role === "admin" && !state.password) {
+    app.innerHTML = `
+      <h1>🔒 Acceso administrador</h1>
+      <div class="card">
+        <div class="field">
+          <label>Contraseña</label>
+          <input type="password" id="pwInput" placeholder="Contraseña" />
+        </div>
+        <button class="btn-primary" style="width:100%" onclick="tryLogin()">Entrar</button>
+        ${state.error ? `<div class="error">${state.error}</div>` : ""}
+        <div style="margin-top:14px;"><button class="logout" onclick="reset()">‹ Volver</button></div>
+      </div>
+    `;
+    document.getElementById("pwInput").addEventListener("keydown", e => { if (e.key === "Enter") tryLogin(); });
+    return;
+  }
+
+  if (state.loading) {
+    app.innerHTML = `<div class="loading">Cargando...</div>`;
+    return;
+  }
+
+  const totalMes = state.registros.reduce((acc, r) => acc + Number(r.totalDia || 0), 0);
+  const horasMes = state.registros.reduce((acc, r) => acc + Number(r.horasTrabajadas || 0), 0);
+
+  let html = `
+    <div class="top-bar">
+      <div>
+        <h1 style="margin-bottom:2px;">🧾 Fichaje Niñera</h1>
+        <span class="badge">${state.role === "admin" ? "Administrador" : "Vista niñera"}</span>
+      </div>
+      <button class="logout" onclick="reset()">Salir</button>
+    </div>
+  `;
+
+  if (state.role === "admin") {
+    html += `
+      <div class="price-box">
+        <label style="white-space:nowrap;">💲 Precio por hora</label>
+        <input type="number" id="precioInput" value="${state.precioHora}" step="0.01" />
+        <button class="btn-primary btn-small" onclick="guardarPrecio()">Guardar</button>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">${state.editingId ? "Editar registro" : "Cargar jornada"}</h3>
+        <div class="field">
+          <label>Fecha</label>
+          <input type="date" id="fechaInput" />
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Hora ingreso</label>
+            <input type="time" id="ingresoInput" />
+          </div>
+          <div class="field">
+            <label>Hora salida</label>
+            <input type="time" id="salidaInput" />
+          </div>
+        </div>
+        <button class="btn-primary" style="width:100%" onclick="guardarRegistro()">
+          ${state.editingId ? "Guardar cambios" : "Agregar"}
+        </button>
+        ${state.editingId ? `<button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="cancelarEdicion()">Cancelar edición</button>` : ""}
+        ${state.error ? `<div class="error">${state.error}</div>` : ""}
+      </div>
+    `;
+  }
+
+  html += `<div class="card">`;
+  if (state.registros.length === 0) {
+    html += `<div class="empty">Todavía no hay registros cargados.</div>`;
+  } else {
+    html += `
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th><th>Ingreso</th><th>Salida</th><th>Horas</th><th>Total</th>
+            ${state.role === "admin" ? "<th></th>" : ""}
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    state.registros.forEach(r => {
+      html += `
+        <tr>
+          <td>${r.fecha}</td>
+          <td>${r.horaIngreso}</td>
+          <td>${r.horaSalida}</td>
+          <td>${Number(r.horasTrabajadas).toFixed(2)}</td>
+          <td>$${Number(r.totalDia).toFixed(2)}</td>
+          ${state.role === "admin" ? `
+            <td class="actions-cell">
+              <button class="btn-secondary btn-small" onclick="editar('${r.id}')">✎</button>
+              <button class="btn-danger btn-small" onclick="borrar('${r.id}')">✕</button>
+            </td>` : ""}
+        </tr>
+      `;
+    });
+    html += `</tbody></table>`;
+    html += `
+      <div class="summary">
+        <span>Horas totales: <strong>${horasMes.toFixed(2)}</strong></span>
+        <span>Total a pagar: <strong>$${totalMes.toFixed(2)}</strong></span>
+      </div>
+    `;
+  }
+  html += `</div>`;
+
+  app.innerHTML = html;
+
+  if (state.role === "admin" && !state.editingId) {
+    document.getElementById("fechaInput").valueAsDate = new Date();
+  }
+}
+
+// ============ ACCIONES ============
+
+function chooseRole(role) {
+  state.role = role;
+  state.error = null;
+  if (role === "ninera") {
+    cargarDatos();
+  } else {
+    render();
+  }
+}
+
+function reset() {
+  state = { role: null, password: null, registros: [], precioHora: 0, editingId: null, loading: true, error: null };
+  render();
+}
+
+async function tryLogin() {
+  const pw = document.getElementById("pwInput").value;
+  if (!pw) return;
+  state.password = pw;
+  state.error = null;
+  await cargarDatos();
+  // Si la contraseña es incorrecta recién lo sabremos al intentar guardar algo,
+  // porque la carga de datos (GET) es pública. Igualmente la dejamos guardada.
+}
+
+async function cargarDatos() {
+  state.loading = true;
+  render();
+  try {
+    const res = await fetch(API_URL + "?action=list");
+    const data = await res.json();
+    state.registros = data.registros || [];
+    state.precioHora = data.precioHora || 0;
+  } catch (err) {
+    state.error = "No se pudo conectar con la planilla. Revisá la URL configurada.";
+  }
+  state.loading = false;
+  render();
+}
+
+async function postAction(payload) {
+  payload.password = state.password;
+  const res = await fetch(API_URL, {
+    method: "POST",
+    // Sin header Content-Type para evitar el preflight de CORS con Apps Script
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (data.error) {
+    state.error = data.error;
+    render();
+    return false;
+  }
+  state.registros = data.registros || [];
+  state.precioHora = data.precioHora || 0;
+  state.error = null;
+  return true;
+}
+
+async function guardarPrecio() {
+  const precio = document.getElementById("precioInput").value;
+  await postAction({ action: "setPrice", precio: precio });
+  render();
+}
+
+async function guardarRegistro() {
+  const fecha = document.getElementById("fechaInput").value;
+  const ingreso = document.getElementById("ingresoInput").value;
+  const salida = document.getElementById("salidaInput").value;
+  if (!fecha || !ingreso || !salida) {
+    state.error = "Completá fecha, hora de ingreso y hora de salida.";
+    render();
+    return;
+  }
+  const payload = state.editingId
+    ? { action: "update", id: state.editingId, fecha, horaIngreso: ingreso, horaSalida: salida }
+    : { action: "add", fecha, horaIngreso: ingreso, horaSalida: salida };
+
+  const ok = await postAction(payload);
+  if (ok) {
+    state.editingId = null;
+    render();
+  }
+}
+
+function editar(id) {
+  const r = state.registros.find(x => String(x.id) === String(id));
+  if (!r) return;
+  state.editingId = id;
+  render();
+  document.getElementById("fechaInput").value = r.fecha;
+  document.getElementById("ingresoInput").value = r.horaIngreso;
+  document.getElementById("salidaInput").value = r.horaSalida;
+}
+
+function cancelarEdicion() {
+  state.editingId = null;
+  render();
+}
+
+async function borrar(id) {
+  if (!confirm("¿Borrar este registro?")) return;
+  await postAction({ action: "delete", id: id });
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
