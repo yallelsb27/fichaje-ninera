@@ -135,7 +135,7 @@
 // =========================================================
 // CONFIGURACIÓN: pegá acá la URL de tu Web App de Apps Script
 // =========================================================
-const API_URL = "https://script.google.com/macros/s/AKfycbym6teGWOv1xTZbqS0eK8IsSt1OHMMaLKhKteXZ6qXVkban9ys6Rsc9qp4P0NP-VLHkvA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxVu_gpxgbYtT6qTebX4VGr5DCVQyhEp08vK-EtAh0xOmmyKbs21qjYdnf54uLGXG7PPg/exec";
 
 let state = {
   unlocked: false,
@@ -147,7 +147,7 @@ let state = {
   editingId: null,
   loading: true,
   error: null,
-  view: "current" // "current" or "closed"
+  view: "current"
 };
 
 function formatHoras(horasDecimal) {
@@ -205,8 +205,8 @@ function render() {
       <div class="card">
         <h3 style="margin-top:0;">${state.editingId ? "Editar registro" : "Cargar jornada"}</h3>
         <div class="field">
-          <label>Fecha</label>
-          <input type="date" id="fechaInput" />
+          <label>Fecha (DD/MM/AA)</label>
+          <input type="text" id="fechaInput" placeholder="DD/MM/AA" maxlength="10" />
         </div>
         <div class="row">
           <div class="field">
@@ -277,7 +277,6 @@ function render() {
     }
     html += `</div>`;
 
-    // Botón de cerrar período
     if (state.unlocked && state.registros.length > 0) {
       html += `
         <button class="btn-success" style="width:100%" onclick="cerrarPeriodo()">
@@ -289,7 +288,6 @@ function render() {
       `;
     }
   } else {
-    // Vista de períodos cerrados
     html += `<div class="card">`;
     if (state.registrosCerrados.length === 0) {
       html += `<div class="empty">No hay períodos cerrados.</div>`;
@@ -330,7 +328,13 @@ function render() {
 
   if (state.unlocked && !state.editingId && state.view === 'current') {
     const fechaInput = document.getElementById("fechaInput");
-    if (fechaInput) fechaInput.valueAsDate = new Date();
+    if (fechaInput) {
+      const hoy = new Date();
+      const dia = String(hoy.getDate()).padStart(2, '0');
+      const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+      const anio = String(hoy.getFullYear()).slice(-2);
+      fechaInput.value = `${dia}/${mes}/${anio}`;
+    }
   }
 }
 
@@ -415,14 +419,28 @@ async function guardarRegistro() {
   const fecha = document.getElementById("fechaInput").value;
   const ingreso = document.getElementById("ingresoInput").value;
   const salida = document.getElementById("salidaInput").value;
-  if (!fecha || !ingreso || !salida) {
+  
+  // Validar formato de fecha DD/MM/AA
+  const fechaRegex = /^(\d{2})\/(\d{2})\/(\d{2})$/;
+  if (!fechaRegex.test(fecha)) {
+    state.error = "Formato de fecha inválido. Usá DD/MM/AA (ej: 31/12/23)";
+    render();
+    return;
+  }
+  
+  if (!ingreso || !salida) {
     state.error = "Completá fecha, hora de ingreso y hora de salida.";
     render();
     return;
   }
+  
+  // Convertir DD/MM/AA a YYYY-MM-DD para el backend
+  const [dia, mes, anio] = fecha.split('/');
+  const fechaBackend = `20${anio}-${mes}-${dia}`;
+  
   const payload = state.editingId
-    ? { action: "update", id: state.editingId, fecha, horaIngreso: ingreso, horaSalida: salida }
-    : { action: "add", fecha, horaIngreso: ingreso, horaSalida: salida };
+    ? { action: "update", id: state.editingId, fecha: fechaBackend, horaIngreso: ingreso, horaSalida: salida }
+    : { action: "add", fecha: fechaBackend, horaIngreso: ingreso, horaSalida: salida };
 
   const ok = await postAction(payload);
   if (ok) {
@@ -436,6 +454,7 @@ function editar(id) {
   if (!r) return;
   state.editingId = id;
   render();
+  // La fecha ya viene en DD/MM/AA del backend
   document.getElementById("fechaInput").value = r.fecha;
   document.getElementById("ingresoInput").value = r.horaIngreso;
   document.getElementById("salidaInput").value = r.horaSalida;
@@ -464,6 +483,7 @@ async function borrarPeriodo(idx) {
   render();
 }
 
+// ============ INICIALIZAR ============
 cargarDatos();
 </script>
 </body>
