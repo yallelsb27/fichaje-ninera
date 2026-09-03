@@ -167,7 +167,7 @@
 // =========================================================
 // CONFIGURACIÓN: pegá acá la URL de tu Web App de Apps Script
 // =========================================================
-const API_URL = "https://script.google.com/macros/s/AKfycbyRXGgKUgtT1M53v2yb0HiZGsyt0ePXshEdz-09eKZTkhIm-cf6ZQ_EFTBdqQUGwh2Kpw/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwTTqsmk67uZNQnjTG29PomOmpuD4yHFAwn8ydpvVh-QFVR2dOKQwoZ7yMViUu0VvA1iw/exec";
 
 let state = {
   unlocked: false,
@@ -386,6 +386,7 @@ function render() {
               </table>
             </div>
             ${state.unlocked ? `
+               <button class="btn-secondary btn-small" onclick="abrirPeriodo(${idx})">🔓 Abrir período</button>
               <button class="btn-danger btn-small" style="margin-top:8px;" onclick="borrarPeriodo(${idx})">🗑️ Eliminar período</button>
             ` : ''}
           </div>
@@ -556,6 +557,11 @@ async function cerrarPeriodo() {
 async function borrarPeriodo(idx) {
   if (!confirm("¿Eliminar este período cerrado?")) return;
   await postAction({ action: "deleteClosedPeriod", index: idx });
+  render();
+}
+async function abrirPeriodo(idx) {
+  if (!confirm("¿Abrir este período? Los registros volverán al mes actual y podrás editarlos.")) return;
+  await postAction({ action: "openPeriod", index: idx });
   render();
 }
 
