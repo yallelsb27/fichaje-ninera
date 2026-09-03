@@ -51,6 +51,16 @@
   .btn-success:hover { background: #3d7a5a; }
   .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); padding: 6px 10px; font-size: 12px; }
   .btn-small { padding: 6px 10px; font-size: 12px; }
+  .btn-expand { 
+    background: transparent; 
+    color: var(--primary); 
+    border: 1px solid var(--primary); 
+    padding: 4px 12px; 
+    font-size: 12px; 
+    border-radius: 999px;
+    margin-top: 4px;
+  }
+  .btn-expand:hover { background: var(--primary); color: white; }
   input {
     width: 100%;
     padding: 12px;
@@ -107,6 +117,21 @@
   .closed-month .summary {
     margin-top: 4px;
   }
+  .closed-details {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #d0e0d0;
+    display: none;
+  }
+  .closed-details.open {
+    display: block;
+  }
+  .closed-details table {
+    font-size: 13px;
+  }
+  .closed-details table td, .closed-details table th {
+    padding: 4px 6px;
+  }
   .tabs {
     display: flex;
     gap: 8px;
@@ -126,6 +151,13 @@
     background: var(--primary);
     color: white;
   }
+  .expand-icon {
+    display: inline-block;
+    transition: transform 0.2s;
+  }
+  .expand-icon.open {
+    transform: rotate(180deg);
+  }
 </style>
 </head>
 <body>
@@ -135,7 +167,7 @@
 // =========================================================
 // CONFIGURACIÓN: pegá acá la URL de tu Web App de Apps Script
 // =========================================================
-const API_URL = "https://script.google.com/macros/s/AKfycbxVu_gpxgbYtT6qTebX4VGr5DCVQyhEp08vK-EtAh0xOmmyKbs21qjYdnf54uLGXG7PPg/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbyRXGgKUgtT1M53v2yb0HiZGsyt0ePXshEdz-09eKZTkhIm-cf6ZQ_EFTBdqQUGwh2Kpw/exec";
 
 let state = {
   unlocked: false,
@@ -147,13 +179,23 @@ let state = {
   editingId: null,
   loading: true,
   error: null,
-  view: "current"
+  view: "current",
+  expandedPeriodos: {}
 };
 
 function formatHoras(horasDecimal) {
   const horas = Math.floor(horasDecimal);
   const minutos = Math.round((horasDecimal - horas) * 60);
   return `${horas}:${String(minutos).padStart(2, '0')}hs`;
+}
+
+function toggleExpand(periodoId) {
+  if (state.expandedPeriodos[periodoId]) {
+    delete state.expandedPeriodos[periodoId];
+  } else {
+    state.expandedPeriodos[periodoId] = true;
+  }
+  render();
 }
 
 function render() {
@@ -296,15 +338,52 @@ function render() {
         const totalPeriodo = periodo.registros.reduce((acc, r) => acc + Number(r.totalDia || 0), 0);
         const horasPeriodo = periodo.registros.reduce((acc, r) => acc + Number(r.horasTrabajadas || 0), 0);
         const horasFormatted = formatHoras(horasPeriodo);
+        const isExpanded = state.expandedPeriodos[periodo.id] || false;
+        
         html += `
           <div class="closed-month">
-            <h4>📅 ${periodo.nombre || `Período ${idx + 1}`}</h4>
-            <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">
-              ${periodo.fechaCierre ? `Cerrado el: ${periodo.fechaCierre}` : ''}
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <h4>📅 ${periodo.nombre || `Período ${idx + 1}`}</h4>
+                <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">
+                  ${periodo.fechaCierre ? `Cerrado el: ${periodo.fechaCierre}` : ''}
+                </div>
+              </div>
+              <button class="btn-expand" onclick="toggleExpand('${periodo.id}')">
+                <span class="expand-icon ${isExpanded ? 'open' : ''}">▼</span>
+                ${isExpanded ? 'Ocultar' : 'Ver detalles'}
+              </button>
             </div>
             <div class="summary">
               <span>Horas totales: <strong>${horasFormatted}</strong></span>
               <span>Total: <strong>$${totalPeriodo.toFixed(2)}</strong></span>
+            </div>
+            <div class="closed-details ${isExpanded ? 'open' : ''}">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Ingreso</th>
+                    <th>Salida</th>
+                    <th>Horas</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${periodo.registros.map(r => {
+                    const horas = formatHoras(Number(r.horasTrabajadas));
+                    return `
+                      <tr>
+                        <td>${r.fecha}</td>
+                        <td>${r.horaIngreso}</td>
+                        <td>${r.horaSalida}</td>
+                        <td>${horas}</td>
+                        <td>$${Number(r.totalDia).toFixed(2)}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
             </div>
             ${state.unlocked ? `
               <button class="btn-danger btn-small" style="margin-top:8px;" onclick="borrarPeriodo(${idx})">🗑️ Eliminar período</button>
@@ -420,7 +499,6 @@ async function guardarRegistro() {
   const ingreso = document.getElementById("ingresoInput").value;
   const salida = document.getElementById("salidaInput").value;
   
-  // Validar formato de fecha DD/MM/AA
   const fechaRegex = /^(\d{2})\/(\d{2})\/(\d{2})$/;
   if (!fechaRegex.test(fecha)) {
     state.error = "Formato de fecha inválido. Usá DD/MM/AA (ej: 31/12/23)";
@@ -434,7 +512,6 @@ async function guardarRegistro() {
     return;
   }
   
-  // Convertir DD/MM/AA a YYYY-MM-DD para el backend
   const [dia, mes, anio] = fecha.split('/');
   const fechaBackend = `20${anio}-${mes}-${dia}`;
   
@@ -454,7 +531,6 @@ function editar(id) {
   if (!r) return;
   state.editingId = id;
   render();
-  // La fecha ya viene en DD/MM/AA del backend
   document.getElementById("fechaInput").value = r.fecha;
   document.getElementById("ingresoInput").value = r.horaIngreso;
   document.getElementById("salidaInput").value = r.horaSalida;
@@ -483,7 +559,6 @@ async function borrarPeriodo(idx) {
   render();
 }
 
-// ============ INICIALIZAR ============
 cargarDatos();
 </script>
 </body>
